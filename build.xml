@@ -1,0 +1,177 @@
+<project name="ass1.ejb" default="all" basedir=".">
+
+  <!-- set global properties for this build -->
+
+  <property name="source" value="src"/>
+  <property name="clientsrc" value="WebApp"/>
+  <property name="EX_WEBAPP_CLASSES" value="WebApp/WEB-INF/classes"/>
+  <property name="EX_WEBAPP_LIB" value="WebApp/WEB-INF/lib"/>
+  <property name="EX_WEBAPP" value="WebApp"/>
+  <property name="CLIENT_CLASSES" value="../../client_classes"/>
+
+  <property name="build" value="${basedir}/build"/>
+  <property name="dist" value="${basedir}/dist"/>
+  <property name="stage" value="${basedir}/stage"/>
+  <property name="APPLICATIONS" value="${dist}"/>
+  <property name="PORT" value="7075"/>
+  <property name="ejb_jar" value="icoupon.jar"/>
+  <property name="ejb_client_jar" value="icoupon_client.jar"/>
+  <property name="ejb_war" value="icoupon.war"/>
+  <property name="ejb_ear" value="icoupon.ear"/>
+  <property name="deploydir" value="/bea/user_projects/domains_2006_spring/xw1004"/>
+
+  <target name="all" depends="clean, init, compile_ejb, generate_desc, replace_ejb, jar_ejb, ejbc, compile_webapp2, generate_web_desc, jar_war, build_ear, compile_client, copy_to_deploy_folder"/>
+
+  <target name="init">
+    <!-- Create the time stamp -->
+    <tstamp/>
+    <!-- Create the build directory structure used by compile
+    and copy the deployment descriptors into it-->
+    <mkdir dir="${build}"/>
+    <mkdir dir="${build}/META-INF"/>
+    <mkdir dir="${dist}"/>
+  </target>
+
+  <!-- Compile ejb classes into the build directory (jar preparation) -->
+<target name="compile_ejb">
+    <javac srcdir="${source}" destdir="${build}"
+       includes="*.java"/>
+  </target>
+
+  <!-- generate the deployment descriptor files -->
+ <target name="generate_desc" depends="compile_ejb">
+    <java classname="weblogic.marathon.ddinit.EJBInit">
+      <arg line="${build}"/>
+    </java>
+ </target>
+
+<target name="replace_ejb" depends="generate_desc">
+<!-- replace two files 
+<replace file="${build}/META-INF/weblogic-cmp-rdbms-jar.xml">
+     <replacetoken><![CDATA[MyDataSource</data-source-name>]]></replacetoken>
+     <replacevalue><![CDATA[icouponSql</data-source-name>]]></replacevalue>
+
+   </replace>
+  <replace file="${build}/META-INF/weblogic-cmp-rdbms-jar.xml">   
+     <replacetoken><![CDATA[coupons</table-name>]]></replacetoken>
+     <replacevalue><![CDATA[Coupon</table-name>]]></replacevalue>
+  </replace>
+  -->
+      <copy file="temp/ejb-jar.xml" todir="${build}/META-INF" overwrite="true"/>
+      <copy file="temp/weblogic-cmp-rdbms-jar.xml" todir="${build}/META-INF" overwrite="true"/>
+      <copy file="temp/weblogic-ejb-jar.xml" todir="${build}/META-INF" overwrite="true"/>
+</target>
+  <!-- Update ejb jar file or create it if it doesn't exist; including XML 
+    deployment descriptors -->
+  <target name="jar_ejb" depends="compile_ejb, generate_desc">
+    <jar jarfile="${dist}/${ejb_jar}"
+      basedir="${build}"
+      update="yes">
+    </jar>
+  </target>
+
+  <!-- Run ejbc to create the deployable jar file -->
+  <target name="ejbc" depends="jar_ejb, replace_ejb">
+    <java classname="weblogic.ejbc" fork="yes" failonerror="yes">
+<!--      <sysproperty key="weblogic.home" value="${WL_HOME}/server"/> -->
+      <arg line="-verbose -compiler javac ${dist}/${ejb_jar}"/>
+      <classpath>
+        <pathelement path="${CLASSPATH}"/>
+      </classpath>
+    </java>
+  <move file="${ejb_client_jar}" todir="${dist}"/>
+  </target>
+
+ <!-- Put the ejb into an ear, to be deployed from the ${APPLICATIONS} dir -->
+<!--
+  <target name="ear_app" depends="jar_ejb">
+    <ear earfile="${APPLICATIONS}/fall06converter.ear" appxml="${source}/application.xml">
+      <fileset dir="${dist}" includes="buildconverter.jar"/>
+    </ear>
+  </target>
+-->
+
+  <!-- Copy the ejb client jar file to the WEB-INF/lib directory of 
+    the webapp.  This ensures that the EJB can be accessed by JSPs of the 
+    Examples WebApp
+-->
+<!--
+  <target name="compile_webapp">
+    <copy file="converter.jsp" todir="${EX_WEBAPP}"/>
+    <copy file="converterBuildClient.jar" tofile="${EX_WEBAPP}/WEB-INF/lib/converterBuildClient.jar"/>
+  </target> 
+
+-->
+<!--
+ The staging directory for this servlet is addServlet. This allows
+ us to create a .war file which can be deployed in the remote ejb server
+ -->
+ <target name="compile_webapp2">
+ <!--<copy file="adder.html" todir="addServlet"/>-->
+ <copy file="${dist}/${ejb_client_jar}" tofile="${clientsrc}/WEB-INF/lib/${ejb_client_jar}"/>
+ <javac srcdir="${clientsrc}" destdir="${clientsrc}/WEB-INF/classes" includes="icoupon.java" classpath="${CLASSPATH}:${clientsrc}/WEB-INF/lib/${ejb_client_jar}"/>
+ </target>
+
+<!-- generate the web.xml deployment descriptor files -->
+<target name="generate_web_desc" depends="compile_webapp2">
+<java classname="weblogic.marathon.ddinit.WebInit">
+<arg line="${clientsrc}"/>
+</java>
+</target>
+
+<!--
+ now create the .war file from WebApp staging directory 
+ -->
+ <target name="jar_war" depends="compile_webapp2">
+ <jar jarfile="${dist}/${ejb_war}" basedir="${clientsrc}" excludes="*.java" update="yes">
+ </jar>
+ </target>
+
+ <target name="build_ear">
+ <mkdir dir="${stage}"/>
+ <mkdir dir="${stage}/META-INF"/>
+ <copy file="application.xml" todir="${stage}/META-INF"/>
+ <copy file="${dist}/${ejb_jar}" todir="${stage}"/>
+ <copy file="${dist}/${ejb_war}" todir="${stage}"/>
+ <jar jarfile="${APPLICATIONS}/${ejb_ear}" basedir="${stage}"/>
+ </target>
+ 
+  <!-- Compile client app into the clientclasses directory, and move the client jar file (created by ejbc) there as well -->
+
+  
+  <target name="compile_client">
+<!--    <copy file="converterBuildClient.jar" tofile="${dist}/converterBuildClient.jar"/>-->
+    <javac srcdir="${clientsrc}"
+      destdir="${build}" 
+      includes="*.java"
+      classpath="${CLASSPATH}:${dist}/${ejb_client_jar}"
+    />
+  </target>
+
+  <target name="clean">
+    <delete dir="${build}"/>
+    <delete dir="${dist}"/>
+    <delete dir="${stage}"/>
+  </target>
+
+  
+  <!-- Run the example -->
+
+  <!--
+  <target name="run">
+  <java classname="ass1.facLookUp.xw1004FacLookUpClient" fork="no">
+    <arg value="t3://bea3.cs.txstate.edu:${PORT}"/>
+    <classpath>
+      <pathelement path="${CLASSPATH}:${dist}/${ejb_client_jar}"/>
+      <pathelement path="${java.class.path}"/>
+    </classpath>
+  </java>
+  </target>
+  -->
+  
+  <target name="copy_to_deploy_folder">
+    <copy file="${dist}/${ejb_ear}" todir="${deploydir}/applications" overwrite="true"/>
+  </target>
+				      
+
+</project>
